@@ -3,7 +3,7 @@
 | Student's name | SCIPER |
 | -------------- | ------ |
 | Alexandra Lagutova | |
-| Loïc Misenta | |
+| Loïc Misenta | 330593 |
 | Juliette Le Béchec | 346045 |
 
 [Milestone 1](#milestone-1) • [Milestone 2](#milestone-2) • [Milestone 3](#milestone-3)
