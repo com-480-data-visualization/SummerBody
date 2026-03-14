@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparison of Athletes by Age (Male vs Female)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <canvas id="age_gen" width="800" height="400"></canvas>
+
+    <script>
+        fetch("data_m.json")
+            .then(response => response.json())
+            .then(data_m => {
+                fetch("data_f.json")
+                    .then(response => response.json())
+                    .then(data_f => {
+                        const ages = Object.keys(data_m);
+
+                        const maleData = Object.values(data_m);
+                        const femaleData = Object.values(data_f);
+
+                        const ctx = document.getElementById('age_gen').getContext('2d');
+                        const ageChart = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: ages,
+                                datasets: [
+                                    {
+                                        label: 'Male Athletes',
+                                        data: maleData,
+                                        backgroundColor: 'rgba(255, 223, 0, 0.5)',
+                                        borderColor: 'rgba(255, 223, 0, 1)',
+                                        borderWidth: 1
+                                    },
+                                    {
+                                        label: 'Female Athletes',
+                                        data: femaleData,
+                                        backgroundColor: 'rgba(204, 153, 255, 0.5)',
+                                        borderColor: 'rgba(204, 153, 255, 1)',
+                                        borderWidth: 1
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Comparison of Athletes by Age (Male vs Female)',
+                                        font: {
+                                            size: 20
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true
+                                    }
+                                },
+                                barThickness: 10,  // Bar thickness for better visual appearance
+                                grouped: true  // Group bars together for comparison
+                            }
+                        });
+                    })
+                    .catch(error => console.error('Error loading female data:', error));
+            })
+            .catch(error => console.error('Error loading male data:', error));
+    </script>
+
+</body>
+</html>

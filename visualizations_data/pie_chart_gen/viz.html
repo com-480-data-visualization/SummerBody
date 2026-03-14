@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athletes Gender Distribution</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #ath_gen {
+            width: 300px;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="ath_gen"></canvas>
+
+    <script>
+        fetch('data.json')
+            .then(response => response.json())
+            .then(data => {
+                const male = data.male;
+                const female = data.female;
+
+                const chartData = {
+                    labels: ['Male', 'Female'],
+                    datasets: [{
+                        label: 'Athletes Distribution',
+                        data: [male, female],
+                        backgroundColor: [
+                            'rgba(255, 223, 0, 0.5)',
+                            'rgba(204, 153, 255, 0.5)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 223, 0, 1)',
+                            'rgba(204, 153, 255, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                };
+
+                const ctx = document.getElementById('ath_gen').getContext('2d');
+                const pieChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: chartData,
+                    options: {
+                        responsive: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Athletes Gender Distribution',
+                                font: {
+                                    size: 20
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(tooltipItem) {
+                                        return tooltipItem.label + ': ' + tooltipItem.raw.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('Error loading data:', error));
+    </script>
+
+</body>
+</html>
