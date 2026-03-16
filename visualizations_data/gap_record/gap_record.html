@@ -3,135 +3,354 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gap to Record by Unit</title>
+    <title>Gap to Record</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
+            margin: 0;
+            padding: 24px;
             background: #111;
             color: white;
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 30px;
         }
 
-        h1, h2 {
-            text-align: center;
-        }
-
-        .chart-wrapper {
+        .wrap {
             width: 95%;
             max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 0 0 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #cfcfcf;
+            margin: 0 0 20px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: center;
+            margin: 0 0 24px;
+        }
+
+        .toggle {
+            display: inline-flex;
+            gap: 8px;
+        }
+
+        .toggle button {
+            border: 1px solid #666;
+            background: transparent;
+            color: #ddd;
+            font: inherit;
+            padding: 8px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toggle button.active {
+            background: #2b2b2b;
+            color: white;
+        }
+
+        .grid {
+            display: grid;
+            gap: 28px;
+        }
+
+        .chart-section h2 {
+            text-align: center;
+            margin: 0 0 14px;
+        }
+
+        .chart-box {
             height: 700px;
-            margin: 40px auto;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 16px;
+            }
+
+            .chart-box {
+                height: 460px;
+            }
         }
     </style>
 </head>
 <body>
+    <div class="wrap">
+        <header class="header">
+            <h1>Normal performance vs world record</h1>
+            <p class="subtitle">
+                Two horizontal rankings with a switch between absolute gap and relative gap.
+            </p>
+        </header>
 
-    <h1>Difference Between Normal Performance and Record</h1>
+        <div class="toolbar">
+            <div class="toggle" aria-label="Metric toggle">
+                <button class="active" data-mode="absolute">Absolute</button>
+                <button data-mode="relative">Relative</button>
+            </div>
+        </div>
 
-    <h2>Track Events — Gap in Seconds</h2>
-    <div class="chart-wrapper">
-        <canvas id="chartSeconds"></canvas>
-    </div>
+        <main class="grid">
+            <section class="chart-section">
+                <h2>Track events</h2>
+                <div class="chart-box">
+                    <canvas id="trackChart"></canvas>
+                </div>
+            </section>
 
-    <h2>Field Events — Gap in Meters</h2>
-    <div class="chart-wrapper">
-        <canvas id="chartMeters"></canvas>
+            <section class="chart-section">
+                <h2>Field events</h2>
+                <div class="chart-box">
+                    <canvas id="fieldChart"></canvas>
+                </div>
+            </section>
+        </main>
     </div>
 
     <script>
-        function createChart(canvasId, dataPath, chartTitle) {
-            fetch(dataPath)
-                .then(response => response.json())
-                .then(data => {
-                    const ctx = document.getElementById(canvasId).getContext('2d');
+        const palette = {
+            text: "#ffffff",
+            muted: "#cfcfcf",
+            grid: "rgba(255,255,255,0.08)",
+            track: "rgba(255, 138, 101, 0.78)",
+            trackBorder: "#ff8a65",
+            field: "rgba(216, 195, 165, 0.78)",
+            fieldBorder: "#d8c3a5"
+        };
 
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: data.labels,
-                            datasets: [{
-                                label: 'Gap to record',
-                                data: data.gap,
-                                backgroundColor: 'rgba(255, 99, 132, 0.5)',
-                                borderColor: 'rgba(255, 99, 132, 1)',
-                                borderWidth: 1
-                            }]
+        const chartConfigs = [
+            {
+                canvasId: "trackChart",
+                path: "data_seconds.json",
+                title: "Track events",
+                type: "time",
+                color: palette.track,
+                border: palette.trackBorder
+            },
+            {
+                canvasId: "fieldChart",
+                path: "data_meters.json",
+                title: "Field events",
+                type: "distance",
+                color: palette.field,
+                border: palette.fieldBorder
+            }
+        ];
+
+        let currentMode = "absolute";
+        const charts = new Map();
+        const datasets = new Map();
+
+        function prettifyLabel(label) {
+            return label.replace(/\bmale\b/i, "Male").replace(/\bfemale\b/i, "Female");
+        }
+
+        function formatNumber(value) {
+            return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+        }
+
+        function formatTime(seconds) {
+            const total = Number(seconds);
+            const hours = Math.floor(total / 3600);
+            const minutes = Math.floor((total % 3600) / 60);
+            const secs = Number((total % 60).toFixed(1));
+
+            if (hours > 0) {
+                return `${hours}h ${String(minutes).padStart(2, "0")}m ${formatNumber(secs).padStart(2, "0")}s`;
+            }
+
+            if (minutes > 0) {
+                return `${minutes}m ${formatNumber(secs).padStart(2, "0")}s`;
+            }
+
+            return `${formatNumber(secs)}s`;
+        }
+
+        function formatMetric(value, type, mode) {
+            if (mode === "relative") {
+                return `${value.toFixed(1)}%`;
+            }
+
+            if (type === "time") {
+                return formatTime(value);
+            }
+
+            return `${formatNumber(value)} m`;
+        }
+
+        function buildEvents(rawData) {
+            return rawData.labels.map((label, index) => {
+                const gap = rawData.gap[index];
+                const record = rawData.record_perf[index];
+
+                return {
+                    label: prettifyLabel(label),
+                    gap,
+                    normal: rawData.normal_perf[index],
+                    record,
+                    relative: (gap / record) * 100
+                };
+            });
+        }
+
+        function sortedForMode(events, mode) {
+            return [...events].sort((a, b) => {
+                const aValue = mode === "relative" ? a.relative : a.gap;
+                const bValue = mode === "relative" ? b.relative : b.gap;
+                return bValue - aValue;
+            });
+        }
+
+        function createChart(config, events) {
+            const ctx = document.getElementById(config.canvasId).getContext("2d");
+            const sorted = sortedForMode(events, currentMode);
+
+            const chart = new Chart(ctx, {
+                type: "bar",
+                data: {
+                    labels: sorted.map((event) => event.label),
+                    datasets: [
+                        {
+                            label: currentMode === "relative" ? "Gap to record (%)" : "Gap to record",
+                            data: sorted.map((event) => currentMode === "relative" ? event.relative : event.gap),
+                            backgroundColor: config.color,
+                            borderColor: config.border,
+                            borderWidth: 1.5,
+                            borderRadius: 8,
+                            barThickness: 16
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: "y",
+                    animation: {
+                        duration: 500
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
                         },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                title: {
-                                    display: true,
-                                    text: chartTitle,
-                                    color: 'white',
-                                    font: {
-                                        size: 24
-                                    }
+                        tooltip: {
+                            backgroundColor: "#222",
+                            borderColor: "#666",
+                            borderWidth: 1,
+                            titleColor: palette.text,
+                            bodyColor: palette.text,
+                            displayColors: false,
+                            callbacks: {
+                                label(context) {
+                                    const activeEvents = sortedForMode(datasets.get(config.canvasId), currentMode);
+                                    const event = activeEvents[context.dataIndex];
+                                    return `Gap: ${formatMetric(currentMode === "relative" ? event.relative : event.gap, config.type, currentMode)}`;
                                 },
-                                legend: {
-                                    labels: {
-                                        color: 'white'
-                                    }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const i = context.dataIndex;
-                                            return `Gap: ${data.gap[i]} ${data.unit[i]}`;
-                                        },
-                                        afterLabel: function(context) {
-                                            const i = context.dataIndex;
-                                            return [
-                                                `Normal: ${data.normal_perf[i]} ${data.unit[i]}`,
-                                                `Record: ${data.record_perf[i]} ${data.unit[i]}`
-                                            ];
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    ticks: {
-                                        color: 'white',
-                                        autoSkip: false,
-                                        maxRotation: 90,
-                                        minRotation: 45
-                                    },
-                                    grid: {
-                                        color: 'rgba(255,255,255,0.1)'
-                                    }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        color: 'white'
-                                    },
-                                    grid: {
-                                        color: 'rgba(255,255,255,0.1)'
-                                    }
+                                afterLabel(context) {
+                                    const activeEvents = sortedForMode(datasets.get(config.canvasId), currentMode);
+                                    const event = activeEvents[context.dataIndex];
+                                    return [
+                                        `Normal: ${formatMetric(event.normal, config.type, "absolute")}`,
+                                        `Record: ${formatMetric(event.record, config.type, "absolute")}`
+                                    ];
                                 }
                             }
                         }
-                    });
-                })
-                .catch(error => console.error(`Error loading ${dataPath}:`, error));
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: {
+                                color: palette.grid
+                            },
+                            border: {
+                                display: false
+                            },
+                            ticks: {
+                                color: palette.muted,
+                                callback(value) {
+                                    return formatMetric(Number(value), config.type, currentMode);
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            border: {
+                                display: false
+                            },
+                            ticks: {
+                                color: palette.text,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            charts.set(config.canvasId, chart);
         }
 
-        createChart(
-            "chartSeconds",
-            "data_seconds.json",
-            "Track Events — Gap in Seconds"
-        );
+        function updateCharts() {
+            chartConfigs.forEach((config) => {
+                const chart = charts.get(config.canvasId);
+                const events = datasets.get(config.canvasId);
+                const sorted = sortedForMode(events, currentMode);
 
-        createChart(
-            "chartMeters",
-            "data_meters.json",
-            "Field Events — Gap in Meters"
-        );
+                chart.data.labels = sorted.map((event) => event.label);
+                chart.data.datasets[0].label = currentMode === "relative" ? "Gap to record (%)" : "Gap to record";
+                chart.data.datasets[0].data = sorted.map((event) => currentMode === "relative" ? event.relative : event.gap);
+                chart.update();
+            });
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll(".toggle button").forEach((button) => {
+                button.classList.toggle("active", button.dataset.mode === mode);
+            });
+            updateCharts();
+        }
+
+        async function init() {
+            try {
+                const loaded = await Promise.all(
+                    chartConfigs.map(async (config) => {
+                        const response = await fetch(config.path);
+                        const data = await response.json();
+                        return { config, events: buildEvents(data) };
+                    })
+                );
+
+                loaded.forEach(({ config, events }) => {
+                    datasets.set(config.canvasId, events);
+                    createChart(config, events);
+                });
+
+                document.querySelectorAll(".toggle button").forEach((button) => {
+                    button.addEventListener("click", () => setMode(button.dataset.mode));
+                });
+            } catch (error) {
+                console.error("Unable to load chart data:", error);
+            }
+        }
+
+        init();
     </script>
-
 </body>
 </html>
